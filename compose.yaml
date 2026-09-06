@@ -1,0 +1,97 @@
+name: bigdata-elasticsearch
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    environment:
+      node.name: es01
+      cluster.name: bigdata-learning
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      xpack.security.autoconfiguration.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      xpack.license.self_generated.type: basic
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
+      ES_JAVA_OPTS: -Xms2g -Xmx2g
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    mem_limit: 4g
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl --fail --silent --max-time 5 -u "elastic:$$ELASTIC_PASSWORD" "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=3s" > /dev/null'
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set ELASTIC_PASSWORD in .env}
+      KIBANA_PASSWORD: ${KIBANA_PASSWORD:?Set KIBANA_PASSWORD in .env}
+    entrypoint: ["/bin/bash", "-euc"]
+    command:
+      - >-
+        curl --fail --silent --show-error --max-time 30
+        -u "elastic:$$ELASTIC_PASSWORD"
+        -H 'Content-Type: application/json'
+        -X POST http://elasticsearch:9200/_security/user/kibana_system/_password
+        --data "{\"password\":\"$$KIBANA_PASSWORD\"}"
+    mem_limit: 256m
+    restart: "no"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.5.3
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    environment:
+      SERVER_NAME: bigdata-kibana
+      SERVER_HOST: 0.0.0.0
+      SERVER_PUBLICBASEURL: http://localhost:5601
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD:?Set KIBANA_PASSWORD in .env}
+      XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_SECURITY_KEY:?Set KIBANA_SECURITY_KEY in .env}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_OBJECTS_KEY:?Set KIBANA_OBJECTS_KEY in .env}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_KEY:?Set KIBANA_REPORTING_KEY in .env}
+      TELEMETRY_ENABLED: "false"
+      NODE_OPTIONS: --max-old-space-size=1536
+    ports:
+      - "127.0.0.1:5601:5601"
+    volumes:
+      - kibana-data:/usr/share/kibana/data
+    mem_limit: 2g
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl --fail --silent --max-time 5 http://localhost:5601/api/status > /dev/null'
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  elasticsearch-data:
+  kibana-data:

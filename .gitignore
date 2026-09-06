@@ -1,0 +1,13 @@
+.vennv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+curation.db
+*.db
+.vscode/
+node_modules/
+dist/
+.playwright-mcp/
+.atl/
+*.tsbuildinfo

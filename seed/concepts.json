@@ -1,0 +1,223 @@
+[
+  {
+    "concept_id": "73211009",
+    "fsn": "Diabetes mellitus (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Diabetes mellitus", "type": "fsn", "preferred": true },
+      { "term": "Diabetes", "type": "synonym" },
+      { "term": "DM", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "44054006",
+    "fsn": "Diabetes mellitus tipo 2 (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Diabetes mellitus tipo 2", "type": "fsn", "preferred": true },
+      { "term": "Diabetes tipo 2", "type": "synonym" },
+      { "term": "DM2", "type": "synonym" },
+      { "term": "Diabetes no insulinodependiente", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "46635009",
+    "fsn": "Diabetes mellitus tipo 1 (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Diabetes mellitus tipo 1", "type": "fsn", "preferred": true },
+      { "term": "DM1", "type": "synonym" },
+      { "term": "Diabetes insulinodependiente", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "38341003",
+    "fsn": "Trastorno hipertensivo del sistema vascular arterial (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Hipertensión arterial", "type": "fsn", "preferred": true },
+      { "term": "HTA", "type": "synonym" },
+      { "term": "Presión arterial alta", "type": "synonym" },
+      { "term": "Tensión arterial elevada", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "195967001",
+    "fsn": "Asma (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Asma", "type": "fsn", "preferred": true },
+      { "term": "Asma bronquial", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "13645005",
+    "fsn": "Enfermedad pulmonar obstructiva crónica (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "in_review",
+    "curation_note": "Revisar solapamiento con bronquitis crónica.",
+    "descriptions": [
+      { "term": "Enfermedad pulmonar obstructiva crónica", "type": "fsn", "preferred": true },
+      { "term": "EPOC", "type": "synonym" },
+      { "term": "Broncopatía obstructiva crónica", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "22298006",
+    "fsn": "Infarto agudo de miocardio (trastorno)",
+    "semantic_tag": "trastorno",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Infarto agudo de miocardio", "type": "fsn", "preferred": true },
+      { "term": "IAM", "type": "synonym" },
+      { "term": "Ataque cardíaco", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "80146002",
+    "fsn": "Apendicectomía (procedimiento)",
+    "semantic_tag": "procedimiento",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Apendicectomía", "type": "fsn", "preferred": true },
+      { "term": "Extirpación del apéndice", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "387713003",
+    "fsn": "Procedimiento quirúrgico (procedimiento)",
+    "semantic_tag": "procedimiento",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Procedimiento quirúrgico", "type": "fsn", "preferred": true },
+      { "term": "Cirugía", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "168731009",
+    "fsn": "Radiografía de tórax (procedimiento)",
+    "semantic_tag": "procedimiento",
+    "curation_status": "in_review",
+    "descriptions": [
+      { "term": "Radiografía de tórax", "type": "fsn", "preferred": true },
+      { "term": "Rx de tórax", "type": "synonym" },
+      { "term": "Placa de tórax", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "386661006",
+    "fsn": "Fiebre (hallazgo)",
+    "semantic_tag": "hallazgo",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Fiebre", "type": "fsn", "preferred": true },
+      { "term": "Hipertermia", "type": "synonym" },
+      { "term": "Temperatura corporal elevada", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "29857009",
+    "fsn": "Dolor torácico (hallazgo)",
+    "semantic_tag": "hallazgo",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Dolor torácico", "type": "fsn", "preferred": true },
+      { "term": "Dolor de pecho", "type": "synonym" },
+      { "term": "Precordialgia", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "267036007",
+    "fsn": "Disnea (hallazgo)",
+    "semantic_tag": "hallazgo",
+    "curation_status": "draft",
+    "curation_note": "Falta acordar sinónimos coloquiales.",
+    "descriptions": [
+      { "term": "Disnea", "type": "fsn", "preferred": true },
+      { "term": "Falta de aire", "type": "synonym" },
+      { "term": "Dificultad respiratoria", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "372804005",
+    "fsn": "Metformina (sustancia)",
+    "semantic_tag": "sustancia",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Metformina", "type": "fsn", "preferred": true },
+      { "term": "Clorhidrato de metformina", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "387458008",
+    "fsn": "Aspirina (sustancia)",
+    "semantic_tag": "sustancia",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Aspirina", "type": "fsn", "preferred": true },
+      { "term": "Ácido acetilsalicílico", "type": "synonym" },
+      { "term": "AAS", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "108537001",
+    "fsn": "Enalapril (sustancia)",
+    "semantic_tag": "sustancia",
+    "curation_status": "draft",
+    "descriptions": [
+      { "term": "Enalapril", "type": "fsn", "preferred": true },
+      { "term": "Maleato de enalapril", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "302509004",
+    "fsn": "Corazón (estructura corporal)",
+    "semantic_tag": "estructura corporal",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Corazón", "type": "fsn", "preferred": true },
+      { "term": "Estructura cardíaca", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "39607008",
+    "fsn": "Pulmón (estructura corporal)",
+    "semantic_tag": "estructura corporal",
+    "curation_status": "approved",
+    "descriptions": [
+      { "term": "Pulmón", "type": "fsn", "preferred": true },
+      { "term": "Estructura pulmonar", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "999000001",
+    "fsn": "Control de glucemia capilar domiciliario (procedimiento)",
+    "semantic_tag": "procedimiento",
+    "module": "local-extension",
+    "curation_status": "in_review",
+    "curation_note": "Concepto de extensión local, sin equivalente internacional directo.",
+    "descriptions": [
+      { "term": "Control de glucemia capilar domiciliario", "type": "fsn", "preferred": true },
+      { "term": "Automonitoreo glucémico", "type": "synonym" },
+      { "term": "HGT domiciliario", "type": "synonym" }
+    ]
+  },
+  {
+    "concept_id": "999000002",
+    "fsn": "Turno programado de telemedicina (procedimiento)",
+    "semantic_tag": "procedimiento",
+    "module": "local-extension",
+    "active": false,
+    "curation_status": "rejected",
+    "curation_note": "Rechazado: se solapa con teleconsulta ya existente.",
+    "descriptions": [
+      { "term": "Turno programado de telemedicina", "type": "fsn", "preferred": true },
+      { "term": "Teleconsulta programada", "type": "synonym" }
+    ]
+  }
+]

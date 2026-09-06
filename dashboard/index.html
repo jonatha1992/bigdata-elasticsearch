@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Store signals · Big Data Lab</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="model.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#overview">Skip to dashboard</a>
+  <header class="masthead">
+    <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">∷</span> SIGNAL LAB <span class="brand-sub">/ Elasticsearch learning project</span></a>
+    <nav aria-label="Main navigation"><a href="#overview">Overview</a><a href="#how-it-works">How it works</a><a href="../docs/prd.md">PRD ↗</a></nav>
+  </header>
+  <main>
+    <section class="intro" id="overview">
+      <div><p class="eyebrow">Synthetic commerce / exploratory analytics</p><h1>Store signals<span>.</span></h1><p class="lede">From a customer action to a searchable event.<br>Explore the activity behind a small online store.</p></div>
+      <aside class="demo-note"><span class="badge">DEMO DATA</span><p>September 1–7, 2026 · UTC</p><p>Illustrative events, calculated in your browser.<br>No connection to Elasticsearch.</p></aside>
+    </section>
+
+    <form id="filters" class="filters" aria-label="Filter events">
+      <div><label for="start">From · UTC</label><input type="date" id="start" name="start" value="2026-09-01" required></div>
+      <div><label for="end">To · UTC</label><input type="date" id="end" name="end" value="2026-09-07" required></div>
+      <div><label for="category">Product category</label><select id="category" name="category"><option value="all">All categories</option><option>Audio</option><option>Desk</option><option>Outdoor</option></select></div>
+      <button class="primary" type="submit">Apply filters</button><button class="secondary" type="reset">Reset</button>
+      <p class="scope-note">All panels use the same filters.</p>
+    </form>
+    <p id="filter-error" class="error" role="alert" hidden></p>
+    <p id="result-status" class="result-status" role="status" aria-live="polite">Loading local example events…</p>
+    <noscript><p>Enable JavaScript to calculate the demo dashboard. The system diagram below remains readable.</p></noscript>
+
+    <section class="metrics" aria-label="Key metrics">
+      <article><h2>Total events</h2><p id="total" class="metric">—</p><p>Searches, views, purchases & errors</p></article>
+      <article><h2>Purchase events</h2><p id="purchases" class="metric">—</p><p>Event count, not unique orders</p></article>
+      <article><h2>Purchase value <span>USD</span></h2><p id="revenue" class="metric">—</p><p>Illustrative gross amount</p></article>
+      <article><h2>Error share</h2><p id="error-rate" class="metric">—</p><p>Error events / all selected events</p></article>
+    </section>
+
+    <div id="empty" class="empty" hidden><h2>No events in this selection</h2><p>Choose September 1–7, 2026 or reset the filters to explore the demo.</p></div>
+    <div class="chart-grid">
+      <section class="panel activity"><div class="panel-heading"><div><p class="eyebrow">Activity</p><h2>Events over time</h2></div><span class="legend"><i></i> Events per UTC day</span></div><div id="timeline" class="timeline"></div><p class="caption">Bar labels show exact counts. Date filters include both endpoints.</p></section>
+      <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Composition</p><h2>What happened?</h2></div></div><div id="types" class="type-list"></div><p class="caption">Each event belongs to one type. Shares use the filtered total.</p></section>
+      <section class="panel products"><div class="panel-heading"><div><p class="eyebrow">Merchandise</p><h2>Products by purchase value</h2></div><span class="quiet">USD · gross</span></div><div class="table-wrap"><table><caption class="sr-only">Products ranked by total purchase amount for the applied filters</caption><thead><tr><th scope="col">Product</th><th scope="col">Purchase events</th><th scope="col">Value</th></tr></thead><tbody id="products"></tbody></table></div></section>
+      <section class="panel reading"><p class="eyebrow">Reading the data</p><h2>Activity is not conversion.</h2><p>A purchase event represents one recorded action. It does not establish a unique order or a customer conversion rate.</p><p>Amounts use integer cents in this demo. No taxes, refunds or costs are modeled, so purchase value is not profit.</p><a href="../docs/dashboard.md">Metric definitions & presentation guide ↗</a></section>
+    </div>
+
+    <section id="how-it-works" class="system"><div class="section-heading"><div><p class="eyebrow">System map</p><h2>How an event becomes an insight.</h2></div><a href="../docs/architecture.md">Full technical diagrams ↗</a></div><p class="system-intro">Target learning workflow. The Docker foundation was verified on September 5; the Python pipeline and operational Kibana panels remain planned.</p>
+      <ol class="pipeline">
+        <li><span class="step">01 / GENERATE</span><h3>Store activity</h3><p>Reproducible search, view, purchase and error events.</p><span class="state planned">Python generator · planned</span></li>
+        <li><span class="step">02 / VALIDATE & LOAD</span><h3>Trusted batches</h3><p>Check fields, record rejects, use stable IDs and retry failed items.</p><span class="state planned">Ingestion · planned</span></li>
+        <li><span class="step">03 / INDEX & QUERY</span><h3>Elasticsearch</h3><p>Store documents, search text, filter fields and aggregate totals.</p><span class="state">Local foundation · recorded</span></li>
+        <li><span class="step">04 / EXPLORE</span><h3>Kibana</h3><p>Inspect events and compare charts against expected totals.</p><span class="state planned">Operational panels · planned</span></li>
+      </ol>
+      <p class="caption">This page is a separate offline demonstrator. Service availability is not monitored here.</p>
+    </section>
+    <footer><span>SIGNAL LAB / Personal Big Data learning project</span><a href="../docs/prd.md">Product requirements</a><span>Sample data · no production claims</span></footer>
+  </main>
+</body>
+</html>
