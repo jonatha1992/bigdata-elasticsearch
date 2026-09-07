@@ -4,8 +4,12 @@ Servicio FastAPI sobre dos almacenes: **SQLite** para el registro editorial y
 **Elasticsearch** para la búsqueda. Es el slice vertical que ejercita el stack del
 puesto: Python, API REST, Docker, Elasticsearch y un modelo de dominio tipo SNOMED CT.
 
-Verificado el 2026-09-06 contra Elasticsearch 9.5.3 en local: 29 tests de
-integración en verde, 20 conceptos cargados y conciliados.
+Verificado el 2026-09-06 contra Elasticsearch 9.5.3 en local: la suite completa en
+verde (33 tests), 20 conceptos cargados y conciliados.
+
+Documentos relacionados: la [arquitectura](architecture.md) tiene los diagramas de
+secuencia y los pipelines; el [modelo de datos](data-model.md) tiene el DER, el
+esquema físico y la correspondencia con el documento de Elasticsearch.
 
 ## Levantar el entorno
 
@@ -159,7 +163,7 @@ $ curl -s "http://127.0.0.1:8000/search/analyze?text=Enfermedades+pulmonares+cro
 ## Tests
 
 ```powershell
-.\.vennv\Scripts\python.exe -m pytest tests/test_curation_api.py -v
+.\.vennv\Scripts\python.exe -m pytest tests/ -q
 ```
 
 Son tests de **integración**: necesitan el stack de Docker arriba. Si Elasticsearch
@@ -168,7 +172,8 @@ no responde, la suite se saltea con un mensaje explícito en vez de fallar confu
 Usan su propio índice (`clinical-concepts-test`) y su propio archivo SQLite en un
 directorio temporal, así que nunca tocan los datos de desarrollo.
 
-Resultado al 2026-09-06: **29 pasan, 0 fallan**, en unos 45 segundos.
+Resultado al 2026-09-06: **33 pasan, 0 fallan**, en 47,81 segundos. Es la suite
+completa del repositorio, sin exclusiones.
 
 Cobertura: salud del servicio, CRUD completo, rechazos de validación (`422`),
 conflicto de ID (`409`), inexistente (`404`), paginación y filtros, insensibilidad a
@@ -202,17 +207,22 @@ Vale la pena registrarlos, porque los dos eran reales:
 - **La indexación es sincrónica.** Un sistema real mueve el paso de indexar a un
   worker que consume una tabla de outbox. La historia de recuperación es la misma;
   cambia quién ejecuta el paso.
-- **Sin UI.** La curaduría se hace hoy por `/docs`. El frontend React/TypeScript es
-  el siguiente entregable.
+- **Los fallos de indexación no se registran.** `index_concept` captura la excepción
+  y devuelve `False` sin dejar rastro del motivo. Cuando una fila quede pendiente, no
+  vas a saber si fue un timeout, un error de mapping o una credencial vencida.
+- **La FK de `descriptions` no se aplica.** SQLite trae `PRAGMA foreign_keys` en `0`
+  y el proyecto no lo enciende, así que el borrado en cascada depende del ORM.
 - El fixture de `seed/concepts.json` es un subconjunto ilustrativo y reducido, en
   castellano. **No es una distribución de SNOMED CT**, que requiere licencia de
   SNOMED International para su redistribución.
 
 ## Próximos pasos
 
-1. UI de curaduría en React + TypeScript: buscador con autocompletado, filtros por
-   facetas, y edición del estado de curaduría.
-2. Alembic para migraciones.
-3. Mover la indexación a un worker con tabla de outbox.
-4. Sinónimos gestionados vía `synonym_graph`, editables sin recrear el índice.
-5. Pasar a PostgreSQL cuando aparezca concurrencia real de escritura.
+La UI de curaduría ya está entregada; está documentada en
+[curation-ui.md](curation-ui.md).
+
+Lo que sigue, priorizado con su motivo y su señal de urgencia, está en el
+[backlog de ingeniería](engineering-backlog.md). Los tres primeros que tocan a esta
+API: credencial de mínimo privilegio para Elasticsearch, alias de índice para
+reindexar sin caída, y Alembic antes del primer cambio de esquema sobre datos que
+importen.

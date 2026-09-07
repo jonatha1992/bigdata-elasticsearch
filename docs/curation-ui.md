@@ -136,8 +136,14 @@ no es lo mismo que auditarlo.
 
 ## Próximos pasos
 
+Priorizados, con su motivo y su señal de urgencia, en el
+[backlog de ingeniería](engineering-backlog.md). Los que tocan al frontend:
+
 1. Vitest + Testing Library sobre los componentes, y Playwright para el flujo completo.
-2. Generar `types.ts` desde `/openapi.json` en vez de escribirlos.
-3. Paginación o scroll infinito.
+   Lo primero a cubrir es que `ResultList` no interprete HTML del servidor: es una
+   defensa de XSS y hoy nada la protege de una regresión.
+2. Generar `types.ts` desde `/openapi.json` en vez de escribirlos. Hoy son dos fuentes
+   de verdad para el mismo contrato y nada las obliga a coincidir.
+3. Paginación o scroll infinito. La API ya soporta `limit` y `offset`.
 4. Edición de descripciones y sinónimos.
 5. Autenticación, antes de que esto salga de localhost.

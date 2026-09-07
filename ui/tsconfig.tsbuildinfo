@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/usedebounced.ts","./src/components/analyzerpeek.tsx","./src/components/conceptpanel.tsx","./src/components/facets.tsx","./src/components/resultlist.tsx","./src/components/searchbar.tsx","./src/components/statusstrip.tsx","./vite.config.ts"],"version":"5.9.3"}

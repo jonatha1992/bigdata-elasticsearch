@@ -1,300 +1,518 @@
-# Arquitectura y flujo del sistema
+# Arquitectura del sistema
 
 Actualizado el 2026-09-06.
 
-El repo tiene dos sistemas sobre la misma infraestructura Docker:
+Un solo sistema: **curaduría de terminología clínica**. Un servicio FastAPI sobre dos
+almacenes — SQLite guarda la decisión editorial, Elasticsearch guarda una proyección
+buscable de esa decisión — con una interfaz React para el curador.
 
-- **Curaduría de terminología clínica** — construido y verificado. Secciones 1 y 2.
-- **Infraestructura común** — Elasticsearch y Kibana en Docker. Sección 3.
-- **Laboratorio de eventos sintéticos** — diseñado, sin implementar. Secciones 4 a 7.
+Todo lo que se dibuja acá existe y corre. No hay diagramas de intención en este
+documento: lo propuesto y no construido vive en el
+[backlog de ingeniería](engineering-backlog.md).
 
-Convención de color en los diagramas: **verde sólido** es lo que existe y corre;
-**naranja punteado** es propuesta, no funcionalidad instalada.
+| Documento | Qué contiene |
+|---|---|
+| Este | Contexto, componentes, despliegue, secuencias, pipelines, flujo de curaduría |
+| [data-model.md](data-model.md) | DER, esquema físico y el documento de Elasticsearch |
+| [curation-api.md](curation-api.md) | Endpoints, diseño del índice, ejemplos |
+| [curation-ui.md](curation-ui.md) | Componentes de la UI y decisiones de frontend |
+| [prd.md](prd.md) | Requisitos y criterios de aceptación |
 
-Ver el [PRD](prd.md) para los criterios de aceptación, la
-[API de curaduría](curation-api.md) para el diseño del índice, y el
-[registro de acceso](access-and-verification.md) para la evidencia de autenticación.
+---
 
-## 1. Despliegue de la curaduría clínica
+## 1. Contexto
 
-Verificado el 2026-09-06 corriendo de punta a punta: navegador → Vite → FastAPI →
-SQLite y Elasticsearch.
+Quién usa el sistema y contra qué habla.
 
 ```mermaid
 flowchart LR
-    Curator[Curador y navegador]
-    subgraph Host[Host Windows - acceso por loopback]
-        subgraph Node[Node 22 - servidor de desarrollo]
-            Vite[Vite 6 - UI React + TypeScript :5173]
-        end
-        subgraph Py[Python 3.14 - entorno .vennv]
-            API[FastAPI - uvicorn :8000]
-            DB[(SQLite curation.db)]
-        end
-        subgraph Docker[Red Docker del proyecto]
-            ES[Elasticsearch 9.5.3 - nodo único :9200]
-            Kibana[Kibana 9.5.3 :5601]
-            ESV[(Volumen nombrado de Elasticsearch)]
-        end
+    Curator["Curador de terminología"]
+    Ops["Operador del laboratorio"]
+
+    subgraph System["Sistema de curaduría clínica"]
+        UI["UI de curaduría<br/>React + TypeScript"]
+        API["API de curaduría<br/>FastAPI"]
+        SQL[("SQLite<br/>registro editorial")]
+        ES[("Elasticsearch<br/>índice de búsqueda")]
     end
-    Curator -->|HTTP| Vite
-    Vite -->|Proxy /api - sin CORS| API
-    API -->|SQLAlchemy - decisión editorial| DB
-    API -->|HTTP autenticado - búsqueda e indexación| ES
-    Curator -->|Inspección de índices| Kibana
+
+    Kibana["Kibana<br/>inspección de índices"]
+
+    Curator -->|"busca, revisa, decide"| UI
+    UI -->|"HTTP /api"| API
+    API -->|"SQLAlchemy"| SQL
+    API -->|"HTTP autenticado"| ES
+    Ops -->|"conciliar, reindexar"| API
+    Ops -->|"inspeccionar mapping y documentos"| Kibana
     Kibana --> ES
-    ES --- ESV
-    classDef existing fill:#e7f5ed,stroke:#23764b,color:#132c1d;
-    class Vite,API,DB,ES,Kibana,ESV existing;
 ```
 
-SQLite guarda la decisión de curaduría: es la fuente de verdad editorial.
-Elasticsearch guarda una **proyección** de esa decisión, optimizada para encontrarla.
-Los dos pueden divergir, y por eso existe la sección 2.
+El curador nunca habla con Elasticsearch directamente. Kibana es una herramienta de
+diagnóstico para el operador, no parte del camino del producto.
 
-Vite redirige `/api/*` a FastAPI y saca el prefijo, así el navegador ve un solo origen
-y no hay CORS en desarrollo. Es también la forma en que un reverse proxy serviría a los
-dos en producción.
+---
 
-Nada de la capa Python es específico de SQLite. Pasar a PostgreSQL es cambiar
-`database_url` e instalar el driver.
+## 2. Componentes
 
-## 2. Escritura y conciliación entre dos almacenes
+Qué módulo hace qué, y quién depende de quién.
 
-El problema central de este tipo de sistema: una edición tiene que llegar a dos lugares,
-y el segundo puede fallar.
+```mermaid
+flowchart TD
+    subgraph Front["ui/ — React 18 + TypeScript 5.7 + Vite 6"]
+        App["App.tsx<br/>estado y orquestación"]
+        SearchBar["SearchBar<br/>búsqueda y autocompletado"]
+        Facets["Facets<br/>filtros con conteos"]
+        ResultList["ResultList<br/>resultados y resaltado"]
+        ConceptPanel["ConceptPanel<br/>detalle y cambio de estado"]
+        StatusStrip["StatusStrip<br/>conciliación visible"]
+        AnalyzerPeek["AnalyzerPeek<br/>tokens de la consulta"]
+        ApiClient["api.ts<br/>cliente HTTP tipado"]
+    end
+
+    subgraph Back["app/ — FastAPI y SQLAlchemy 2.0"]
+        Main["main.py<br/>arranque, CORS, /health"]
+        RConcepts["routers/concepts.py<br/>CRUD"]
+        RSearch["routers/search.py<br/>búsqueda, sugerencias, analyze"]
+        RAdmin["routers/admin.py<br/>índice, reindex, reconcile"]
+        Schemas["schemas.py<br/>contrato Pydantic"]
+        Models["models.py<br/>ORM Concept y Description"]
+        Indexer["indexer.py<br/>proyección a documento"]
+        Search["search.py<br/>constructores de query"]
+        EsIndex["es_index.py<br/>mapping y analyzers"]
+        EsClient["es_client.py<br/>cliente y ciclo del índice"]
+        Db["db.py<br/>engine y sesiones"]
+        Config["config.py<br/>settings desde .env"]
+    end
+
+    SQL[("curation.db")]
+    ES[("clinical-concepts")]
+
+    App --> SearchBar
+    App --> Facets
+    App --> ResultList
+    App --> ConceptPanel
+    App --> StatusStrip
+    App --> AnalyzerPeek
+    SearchBar --> ApiClient
+    Facets --> ApiClient
+    ResultList --> ApiClient
+    ConceptPanel --> ApiClient
+    StatusStrip --> ApiClient
+    AnalyzerPeek --> ApiClient
+    ApiClient -->|"proxy /api de Vite"| Main
+    Main --> RConcepts
+    Main --> RSearch
+    Main --> RAdmin
+    RConcepts --> Models
+    RConcepts --> Indexer
+    RConcepts --> Schemas
+    RSearch --> Search
+    RSearch --> Schemas
+    RAdmin --> Indexer
+    RAdmin --> EsClient
+    RAdmin --> Models
+    Indexer --> Models
+    Indexer --> EsClient
+    Search --> EsIndex
+    EsClient --> EsIndex
+    EsClient --> Config
+    Models --> Db
+    Db --> Config
+    Db --> SQL
+    EsClient --> ES
+```
+
+Tres separaciones deliberadas:
+
+- **`schemas.py` no es `models.py`.** La forma de la base y la forma del cable cambian
+  por motivos distintos. Mezclarlas obliga a versionar la API cada vez que se agrega una
+  columna.
+- **`search.py` no habla con la base.** Construye cuerpos de consulta; el router los
+  ejecuta. Los constructores se pueden testear sin Elasticsearch arriba.
+- **`indexer.py` es el único que sabe proyectar.** Un solo lugar decide cómo una fila se
+  convierte en documento, así que el mapping y la proyección no pueden divergir en
+  silencio.
+
+---
+
+## 3. Despliegue
+
+Verificado el 2026-09-06 de punta a punta: navegador → Vite → FastAPI → SQLite y
+Elasticsearch.
+
+```mermaid
+flowchart LR
+    Curator["Curador y navegador"]
+
+    subgraph Host["Host Windows 11 — todo publicado en loopback"]
+        subgraph Node["Node 22"]
+            Vite["Vite 6 :5173<br/>servidor de desarrollo"]
+        end
+        subgraph Py["Python 3.14 — entorno .vennv"]
+            API["uvicorn :8000<br/>FastAPI"]
+            DB[("curation.db<br/>archivo SQLite")]
+        end
+        subgraph Docker["Red Docker — proyecto bigdata-elasticsearch"]
+            ES["Elasticsearch 9.5.3<br/>nodo único :9200"]
+            Setup["setup<br/>corre una vez y sale"]
+            Kibana["Kibana 9.5.3 :5601"]
+            ESV[("volumen elasticsearch-data")]
+            KV[("volumen kibana-data")]
+        end
+    end
+
+    Curator -->|"HTTP"| Vite
+    Vite -->|"proxy /api, sin CORS"| API
+    API -->|"SQLAlchemy"| DB
+    API -->|"HTTP básico autenticado"| ES
+    Curator -->|"diagnóstico"| Kibana
+    Setup -->|"fija la contraseña de kibana_system"| ES
+    Setup -->|"su éxito habilita el arranque"| Kibana
+    Kibana -->|"credencial kibana_system"| ES
+    ES --- ESV
+    Kibana --- KV
+```
+
+Notas de despliegue que importan:
+
+- **La API no está en contenedor.** Corre en el host contra el Elasticsearch de Docker.
+  Es lo cómodo para desarrollar con recarga; empaquetarla es trabajo pendiente.
+- **Vite redirige `/api/*` y saca el prefijo.** El navegador ve un solo origen, así que
+  no hay CORS en desarrollo. Es también la forma en que un reverse proxy serviría a los
+  dos en producción.
+- **Elasticsearch: 4 GiB de límite, heap de JVM de 2 GiB.** Kibana: 2 GiB, heap de Node
+  de 1.5 GiB. Los volúmenes nombrados sobreviven a `docker compose down`; `down -v` los
+  borra.
+- **Solo HTTP, solo loopback.** No es una plantilla de producción. Ver
+  [local-stack.md](local-stack.md).
+- Nada de la capa Python es específico de SQLite: pasar a PostgreSQL es cambiar
+  `database_url` e instalar el driver.
+
+---
+
+## 4. Camino de escritura: dos almacenes, una decisión
+
+El problema central del sistema. Una edición tiene que llegar a dos lugares y el segundo
+puede fallar.
 
 ```mermaid
 sequenceDiagram
     actor Curator as Curador
+    participant UI as UI React
     participant API as FastAPI
     participant DB as SQLite
     participant ES as Elasticsearch
-    Curator->>API: PATCH /concepts/{id} - nuevo estado
-    API->>DB: Marca pending_index = true y commitea
+
+    Curator->>UI: Cambia el estado de curaduría
+    UI->>API: PATCH /concepts/{id}
+    API->>DB: Aplica cambios y marca pending_index = true
+    DB-->>API: commit confirmado
     Note over DB: La decisión editorial ya está a salvo
-    API->>ES: index(id, documento proyectado)
+
+    API->>ES: index(id, documento proyectado, refresh=wait_for)
+
     alt Elasticsearch confirma
         ES-->>API: 200 acknowledged
         API->>DB: pending_index = false, indexed_at = ahora
-        API-->>Curator: 200 con el concepto actualizado
+        API-->>UI: 200 con pending_index = false
     else Elasticsearch falla o no responde
-        Note over API: El fallo no rechaza una edición ya commiteada
-        API-->>Curator: 200 con pending_index = true
+        Note over API: Un fallo de índice NO rechaza una edición ya commiteada
+        API-->>UI: 200 con pending_index = true
         Note over DB: La fila queda marcada como reparable
     end
-    Curator->>API: GET /admin/reconcile
-    API->>DB: Conteo de conceptos
-    API->>ES: Conteo de documentos
-    API-->>Curator: in_sync = false si difieren
-    Curator->>API: POST /admin/reindex
-    API->>ES: bulk de las filas marcadas
-    Note over API: Se inspecciona cada item, no solo el estado HTTP
+
+    UI->>API: GET /admin/reconcile
+    API->>DB: count de conceptos y de pendientes
+    API->>ES: count de documentos
+    API-->>UI: in_sync = false si difieren
+    UI-->>Curator: La franja superior se pone en alerta
 ```
 
-Tres decisiones que vale la pena entender:
+Cuatro decisiones que vale la pena entender:
 
-1. **La fila se marca sucia antes de indexar.** Si el proceso muere entre los dos pasos,
-   queda evidencia. Marcarla después dejaría deriva invisible.
-2. **Un fallo de indexación no rechaza la edición.** El curador ya decidió; perder eso
-   por una caída de Elasticsearch sería peor que servir un índice atrasado un rato.
-3. **El bulk se inspecciona item por item.** Una petición bulk puede devolver HTTP 200 y
-   traer documentos fallados adentro. Reportar la petición como exitosa sería mentir.
+1. **La fila se marca sucia ANTES de indexar.** Si el proceso muere entre los dos pasos,
+   queda evidencia. Marcarla después dejaría deriva invisible, que es el peor de los
+   estados: incorrecto y silencioso.
+2. **Un fallo de indexación no rechaza la edición.** El curador ya decidió. Perder esa
+   decisión por una caída de Elasticsearch es peor que servir un índice atrasado un rato.
+3. **`refresh=wait_for` en vez de `refresh=true`.** Espera al refresh natural en lugar de
+   forzar uno. La escritura es visible cuando responde, sin castigar al índice con un
+   refresh por documento.
+4. **La desincronización se muestra, no se esconde.** `StatusStrip` la pone en la cara
+   del curador en vez de dejar que la descubra por una búsqueda que calladamente devuelve
+   de menos.
 
-Un sistema en producción movería el paso de indexar a un worker que consume una tabla
-de outbox. La historia de recuperación es la misma; cambia quién ejecuta el paso.
+---
 
-La franja superior de la UI muestra ambos conteos, así que la desincronización se ve en
-vez de descubrirse por una búsqueda que calladamente devuelve de menos.
-
-## 3. Despliegue base de Docker
-
-```mermaid
-flowchart LR
-    Owner[Usuario local y navegador]
-    subgraph Host[Host Windows - acceso por loopback]
-        subgraph Docker[Red Docker del proyecto]
-            ES[Elasticsearch 9.5.3 - nodo único]
-            Setup[Setup de una sola vez - sale tras completarse]
-            Kibana[Kibana 9.5.3]
-            ESV[(Volumen nombrado de Elasticsearch)]
-            KV[(Volumen nombrado de Kibana)]
-        end
-    end
-    Owner -->|HTTP 127.0.0.1:5601 - login humano| Kibana
-    Owner -->|HTTP 127.0.0.1:9200 - API autenticada| ES
-    ES -->|Dependencia saludable| Setup
-    Setup -->|Define la contraseña del servicio interno| ES
-    Setup -->|Su éxito habilita el arranque| Kibana
-    Kibana -->|HTTP - credencial kibana_system| ES
-    ES --- ESV
-    Kibana --- KV
-    classDef existing fill:#e7f5ed,stroke:#23764b,color:#132c1d;
-    class ES,Setup,Kibana,ESV,KV existing;
-```
-
-Elasticsearch es el almacén de documentos, el motor de búsqueda y el motor de
-agregaciones. Kibana es la interfaz de navegador; que el servicio de Kibana esté corriendo
-no implica que se haya creado un dashboard. `setup` inicializa la credencial interna de
-Kibana y se espera que termine con éxito en lugar de quedarse corriendo. El administrador
-humano es `elastic`.
-
-El archivo de Compose limita Elasticsearch a 4 GiB con un heap de JVM de 2 GiB, y Kibana
-a 2 GiB con un heap de Node de 1.5 GiB. Los volúmenes nombrados conservan los datos cuando
-los contenedores se detienen; `docker compose down -v` los borraría. Mantené los secretos
-locales y las claves de cifrado privados y consistentes con los datos persistidos. Esta
-configuración HTTP es solo para uso local.
-
-## 4. Flujo de datos objetivo del laboratorio de eventos
-
-```mermaid
-flowchart LR
-    Config[Semilla, cantidad, hora de inicio, esquema y moneda]
-    Generator[Generador de eventos sintéticos en Python]
-    Validator[Validación de esquema y duplicados]
-    Invalid[Registros rechazados con motivos]
-    Loader[Cargador bulk acotado - IDs de documento estables]
-    Failed[Fallos de indexación y registros sin resolver]
-    ES[Servicio Elasticsearch existente]
-    Index[(Índice de eventos mapeado propuesto)]
-    Queries[Búsquedas guardadas y agregaciones]
-    Kibana[Servicio Kibana existente]
-    Dashboard[Dashboard operativo propuesto]
-    Report[Informe independiente de conciliación y benchmark]
-    Config --> Generator --> Validator
-    Validator -->|Contenido inválido o en conflicto| Invalid
-    Validator -->|Registros válidos y únicos| Loader
-    Loader -->|Peticiones bulk autenticadas| ES
-    ES --> Index
-    Loader -->|Fallos permanentes o agotados| Failed
-    Index --> Queries --> Kibana --> Dashboard
-    Validator -->|Conteos y sumas esperados| Report
-    Loader -->|Resultados terminales y tiempos| Report
-    Queries -->|Conteos y sumas buscables| Report
-    classDef existing fill:#e7f5ed,stroke:#23764b,color:#132c1d;
-    classDef proposed fill:#fff4df,stroke:#aa6b14,stroke-dasharray:5 5,color:#47300b;
-    class ES,Kibana existing;
-    class Config,Generator,Validator,Invalid,Loader,Failed,Index,Queries,Dashboard,Report proposed;
-```
-
-El repositorio actual contiene tests del contrato del generador, pero falta `events.py`.
-Los componentes de Python, el índice de eventos, las consultas guardadas y el dashboard de
-este flujo objetivo todavía hay que implementarlos. Los informes comparan las expectativas
-calculadas a partir de los datos de origen con los resultados de Elasticsearch; comparar
-dos paneles de un dashboard entre sí no es validación.
-
-## 5. Secuencia de ingesta propuesta y manejo de fallos
+## 5. Camino de lectura: de la tecla al resultado
 
 ```mermaid
 sequenceDiagram
-    actor User as Dueño del laboratorio
-    participant Generator as Generador y validador (propuesto)
-    participant Loader as Cargador bulk (propuesto)
-    participant ES as Elasticsearch (existente)
-    participant Report as Informe de ejecución (propuesto)
-    participant UI as Dashboard (propuesto)
-    User->>Generator: Entrega la configuración determinista del dataset
-    Generator->>Report: Manifiesto, rechazos de validación y duplicados idénticos
-    Generator->>Loader: Registros válidos y únicos y totales esperados
-    Loader->>ES: Indexación bulk con event_id como ID de documento
-    alt El transporte falla o se pierde la respuesta
-        Loader->>Loader: Trata los resultados como inciertos; reintento acotado con los mismos IDs
-    else Se recibe la respuesta bulk
-        ES-->>Loader: Resultados por item
-        Loader->>Loader: Clasifica cada item, no solo el estado de la petición
-    end
-    loop Mientras queden items reintentables o inciertos y el presupuesto de reintentos lo permita
-        Loader->>ES: Reintenta los items afectados con IDs estables y backoff
-        ES-->>Loader: Resultados por item o fallo de transporte
-    end
-    Loader->>Report: Éxitos finales, fallos permanentes y reintentos agotados
-    alt La ejecución se interrumpe antes de los resultados finales
-        Loader->>Report: Marca como incompleta e identifica los registros sin resolver
-    else La ejecución se completa
-        Loader->>ES: Establece visibilidad de búsqueda y consulta conteos y totales
-        ES-->>Loader: Resultados buscables
-        Loader->>Report: Concilia los resultados de entrada con las expectativas independientes
-        User->>UI: Abre el rango temporal del dataset y los filtros
-        UI->>ES: Consulta agregados a través de Kibana
-        ES-->>UI: Resultados del rango seleccionado
+    actor Curator as Curador
+    participant UI as UI React
+    participant API as FastAPI
+    participant ES as Elasticsearch
+
+    Curator->>UI: Escribe "hipertension"
+    Note over UI: useDebounced espera a que deje de tipear
+    UI->>API: GET /search/suggest?q=hipertension
+    API->>ES: multi_match bool_prefix sobre suggest y sus n-gramas
+    ES-->>API: sugerencias por prefijo
+    API-->>UI: SuggestResponse
+    UI-->>Curator: Desplegable navegable con flechas
+
+    Curator->>UI: Enter
+    UI->>API: GET /search?q=hipertension&semantic_tag=trastorno
+    Note over API: build_filters separa filtros de scoring
+    API->>ES: bool con must de texto y filter de términos
+    ES-->>API: hits, highlight y aggregations
+    API-->>UI: SearchResponse con facetas y fragmentos
+    Note over UI: El resaltado se reconstruye como nodos mark reales
+    UI-->>Curator: Resultados, facetas con conteos y resaltado
+
+    opt El curador no encuentra lo que busca
+        Curator->>UI: Abre el inspector de análisis
+        UI->>API: GET /search/analyze?text=...&analyzer=clinical_text
+        API->>ES: _analyze
+        ES-->>API: tokens con posiciones y offsets
+        API-->>UI: AnalyzeResponse
+        UI-->>Curator: Los tokens exactos que produjo la consulta
     end
 ```
 
-Los límites de reintentos, el backoff, la clasificación de estados reintentables y el
-mecanismo de visibilidad son decisiones de implementación todavía por definir. Los fallos
-de autenticación o de mapping no deben entrar en un bucle indefinido. Los IDs estables
-hacen que reescribir contenido idéntico sea seguro frente a la multiplicación de
-documentos; no prueban que datasets distintos no puedan colisionar. Usá namespaces en los
-IDs o aislá los datasets, y rechazá contenido duplicado en conflicto.
+**Las respuestas viejas se descartan.** Cada efecto de la UI lleva una bandera
+`cancelled`: si la respuesta lenta de una consulta anterior llega después de una nueva,
+se tira. Sin eso, escribís rápido y la pantalla te muestra el resultado de hace tres
+letras.
 
-## 6. Modelo conceptual de eventos
+El resaltado **nunca** usa `dangerouslySetInnerHTML`. Elasticsearch devuelve los
+fragmentos con `<mark>` ya insertado, y ese fragmento contiene texto que cargó un
+curador. Inyectarlo como HTML crudo es un agujero de XSS a cambio de una palabra en
+negrita.
 
-Lo siguiente es un contrato lógico propuesto, derivado en parte de los tests existentes.
-No es un mapping instalado de Elasticsearch ni un esquema de base de datos relacional.
-Cada documento tiene exactamente un tipo de evento y su payload correspondiente. Los
-identificadores sintéticos de usuario y sesión no implican usuarios reales ni un embudo de
-sesión validado.
+---
+
+## 6. Pipeline de análisis de texto
+
+Acá se decide si una búsqueda encuentra algo. El mismo texto se trata de tres formas
+distintas, a propósito.
 
 ```mermaid
-classDiagram
-    class Event {
-        string event_id
-        datetime timestamp
-        string event_type
-        string user_id
-        string session_id
-    }
-    class SearchPayload {
-        string query
-        integer results_count
-    }
-    class ViewPayload {
-        string product_id
-        string product_name
-        string category
-        number unit_price
-    }
-    class PurchasePayload {
-        number unit_price
-        integer quantity
-        number amount
-    }
-    class ErrorPayload {
-        string error_code
-        string severity
-        string message
-    }
-    Event ..> SearchPayload : solo search
-    Event ..> ViewPayload : solo view
-    Event ..> PurchasePayload : solo purchase
-    Event ..> ErrorPayload : solo error
+flowchart LR
+    Input["Texto de entrada:<br/>Hipertensión arterial"]
+
+    subgraph CT["clinical_text — recall alto"]
+        CT1["standard tokenizer"] --> CT2["lowercase"] --> CT3["asciifolding"] --> CT4["spanish_stop"] --> CT5["stemmer light_spanish"]
+    end
+
+    subgraph CE["clinical_exact — precisión"]
+        CE1["standard tokenizer"] --> CE2["lowercase"] --> CE3["asciifolding"]
+    end
+
+    subgraph CK["clinical_keyword — normalizador"]
+        CK1["sin tokenizar:<br/>toda la cadena"] --> CK2["lowercase"] --> CK3["asciifolding"]
+    end
+
+    Input --> CT1
+    Input --> CE1
+    Input --> CK1
+
+    CT5 --> CTOut["hipertens, arterial<br/>matchea hipertensivo"]
+    CE3 --> CEOut["hipertension, arterial<br/>NO matchea hipertensivo"]
+    CK3 --> CKOut["hipertension arterial<br/>un solo token"]
+
+    CTOut --> Use1["Caja de búsqueda principal"]
+    CEOut --> Use2["Boost de aciertos exactos"]
+    CKOut --> Use3["Facetas, filtros y ordenamiento"]
 ```
 
-La etiqueta `timestamp` del diagrama corresponde al campo JSON `@timestamp`. Los tests
-existentes exigen que sea parseable como ISO-8601 y que los timestamps no decrezcan; el
-validador propuesto debería además exigir zona horaria y normalizar a UTC. Los tests de
-compra exigen `amount = unit_price × quantity`. Actualmente no exigen un ID de pedido,
-campo de moneda ni campos de producto en las compras. No infieras cantidad de pedidos ni
-ingresos por producto a partir de ese contrato incompleto.
+Por qué las tres:
 
-Intención de mapping propuesta: IDs y enums como keywords de coincidencia exacta;
-`@timestamp` como date; query, nombre de producto y mensaje como texto buscable con
-variantes keyword donde haga falta agrupar de forma exacta; conteos como enteros; dinero
-con una regla de precisión explícita. La representación preferida en unidades menores y la
-moneda a nivel de dataset requieren acuerdo antes de implementar. Se propone que el índice
-de eventos tenga un shard primario y cero réplicas para este ejercicio de nodo único.
+- **`asciifolding` no es un detalle.** Los curadores escriben "hipertension" sin tilde
+  todo el tiempo. Sin folding, esas consultas devolverían cero en silencio.
+- **El stemming sube el recall y baja la precisión.** `clinical_text` colapsa
+  "hipertensión" e "hipertensivo" en la misma raíz. Eso encuentra más, pero también
+  encuentra cosas que no son exactamente lo que pediste.
+- **`clinical_exact` recupera la precisión con boosts.** Un acierto sin stemmear pesa más
+  (`fsn.exact^6`) que uno stemmeado (`fsn^4`), así que lo exacto sube al tope sin perder
+  lo aproximado.
+- **El normalizador no es un analyzer.** No parte el texto: produce un único token con
+  toda la cadena. Es lo que hace que una faceta diga "estructura corporal" y no
+  "estructura" + "corporal".
 
-## 7. Límites de la demostración
+Boosts completos, de mayor a menor: `fsn.exact^6`, `preferred_term.exact^5`, `fsn^4`,
+`preferred_term^3`, `terms.exact^2`, `terms^1`. Un acierto exacto le gana a uno
+stemmeado, y el nombre completamente especificado le gana a un sinónimo.
 
-La demostración futura muestra generación, validación, indexación, visibilidad de
-búsqueda, agregaciones y visualización en ese orden. Mostrá tanto un registro malformado
-como una repetición idéntica, y después compará los KPIs del dashboard con los totales
-independientes del fixture. Seleccioná la extensión temporal real del dataset antes de
-abrir los gráficos.
+### Filtros versus scoring
 
-El [dashboard de presentación offline](../dashboard/index.html) explica este recorrido con
-datos sintéticos etiquetados y sin conexión a un backend. Solo un dashboard respaldado por
-el dataset cargado en Elasticsearch satisface el criterio de aceptación operativo. Un
-laboratorio local de nodo único no puede demostrar tolerancia a fallos distribuida; un
-experimento posterior multinodo en la misma máquina sigue compartiendo el dominio de falla
-de su host.
+```mermaid
+flowchart TD
+    Q["Consulta del curador"] --> Split{"¿Qué tipo de cláusula es?"}
+    Split -->|"texto libre"| Must["contexto must<br/>multi_match con fuzziness AUTO"]
+    Split -->|"tipo semántico, estado, activo"| Filter["contexto filter<br/>term queries"]
+    Must --> Score["Aporta al puntaje de relevancia"]
+    Filter --> NoScore["NO aporta al puntaje<br/>cacheable por Elasticsearch"]
+    Score --> Bool["bool query"]
+    NoScore --> Bool
+    Bool --> Results["Resultados ordenados<br/>solo por relevancia textual"]
+```
+
+Un filtro responde sí o no. No debe influir en qué tan relevante es un documento.
+Mezclar las dos cosas es la forma clásica de terminar con rankings sin explicación. Hay
+un test que fija esa regla: `test_filters_do_not_change_the_score` compara los puntajes
+con y sin filtro y exige que sean idénticos.
+
+---
+
+## 7. Pipeline de indexación y conciliación
+
+Cómo una fila relacional termina siendo un documento buscable, y cómo se repara cuando
+no llega.
+
+```mermaid
+flowchart TD
+    Write["Escritura en la API:<br/>POST o PATCH /concepts"] --> Mark["pending_index = true<br/>y commit en SQLite"]
+    Mark --> Project["indexer.to_document<br/>aplana concepto y descripciones activas"]
+    Project --> Index["client.index<br/>refresh = wait_for"]
+
+    Index --> Ack{"¿Elasticsearch confirmó?"}
+    Ack -->|"sí"| Clear["pending_index = false<br/>indexed_at = ahora"]
+    Ack -->|"no"| Dirty["La fila queda marcada.<br/>El curador recibe 200 igual"]
+
+    Clear --> Synced["Estado sincronizado"]
+    Dirty --> Recon
+
+    Recon["GET /admin/reconcile"] --> Compare{"¿counts iguales<br/>y pendientes en cero?"}
+    Compare -->|"sí"| InSync["in_sync = true"]
+    Compare -->|"no"| Drift["in_sync = false<br/>Alerta en la franja de la UI"]
+
+    Drift --> Reindex["POST /admin/reindex"]
+    Reindex --> Bulk["helpers.bulk<br/>raise_on_error = false"]
+    Bulk --> Inspect["Se inspecciona CADA item,<br/>no el estado HTTP de la petición"]
+    Inspect --> PerItem{"¿El item tuvo éxito?"}
+    PerItem -->|"sí"| ClearOne["Limpia el flag de esa fila"]
+    PerItem -->|"no"| Report["Cuenta el fallo y devuelve<br/>concept_id y error"]
+    ClearOne --> Synced
+    Report --> Drift
+```
+
+**Una petición bulk puede devolver HTTP 200 con documentos fallados adentro.** Reportar
+la petición como exitosa sería mentir. Por eso `reindex_pending` clasifica item por item
+y solo limpia el flag de las filas que Elasticsearch aceptó de verdad.
+
+`POST /admin/reindex?only_pending=false` reconstruye todos los documentos. Es lo que se
+corre después de cambiar el mapping — junto con `scripts/seed.py --reset`, porque los
+analyzers y los tipos de campo son inmutables una vez creado el índice.
+
+El contrato de conciliación, en una línea:
+
+```
+conceptos_en_base == documentos_en_indice   cuando   pending_index == 0
+```
+
+---
+
+## 8. Flujo de trabajo de curaduría
+
+Lo que hace una persona, de punta a punta.
+
+```mermaid
+flowchart TD
+    Start(["El curador abre la UI"]) --> Load["Carga inicial:<br/>conceptos, facetas y franja de estado"]
+    Load --> Check{"¿La franja dice sincronizado?"}
+    Check -->|"no"| Repair["Pulsa reparar:<br/>POST /admin/reindex"]
+    Repair --> Load
+    Check -->|"sí"| Search["Escribe una consulta"]
+
+    Search --> Suggest["Aparecen sugerencias por prefijo"]
+    Suggest --> Pick{"¿Encontró el concepto?"}
+
+    Pick -->|"no"| Why["Abre el inspector de análisis"]
+    Why --> Understand["Ve los tokens reales de su consulta"]
+    Understand --> Refine["Ajusta términos o filtros"]
+    Refine --> Search
+
+    Pick -->|"sí"| Open["Abre el panel de detalle"]
+    Open --> Review["Revisa FSN, etiqueta semántica<br/>y descripciones"]
+    Review --> Decide{"¿Qué decide?"}
+
+    Decide -->|"falta información"| Note["Escribe una nota de curaduría"]
+    Decide -->|"pasa a revisión"| ToReview["curation_status = in_review"]
+    Decide -->|"aprueba"| Approve["curation_status = approved"]
+    Decide -->|"rechaza"| Reject["curation_status = rejected"]
+
+    Note --> Save
+    ToReview --> Save
+    Approve --> Save
+    Reject --> Save
+
+    Save["PATCH /concepts/{id}"] --> Persist["SQLite commitea<br/>y marca pending_index"]
+    Persist --> Reindexed{"¿Elasticsearch confirmó?"}
+    Reindexed -->|"sí"| Fresh["El resultado refleja el estado nuevo:<br/>indexed_at igual a updated_at"]
+    Reindexed -->|"no"| Flagged["La franja avisa que hay pendientes"]
+    Flagged --> Repair
+    Fresh --> More{"¿Sigue curando?"}
+    More -->|"sí"| Search
+    More -->|"no"| End(["Fin"])
+```
+
+El camino "no lo encontré → miro los tokens → entiendo por qué" es el que convierte a la
+búsqueda de caja negra en algo diagnosticable. Es la razón de que `/search/analyze` sea
+un endpoint de producto y no una herramienta de debug escondida.
+
+---
+
+## 9. Estados de curaduría
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft: POST /concepts
+    draft --> in_review: el curador lo eleva
+    in_review --> approved: cumple los criterios editoriales
+    in_review --> rejected: no cumple
+    in_review --> draft: vuelve por falta de información
+    approved --> in_review: reapertura por revisión posterior
+    rejected --> in_review: reapertura con nueva evidencia
+    draft --> [*]: DELETE /concepts/id
+    approved --> [*]: DELETE /concepts/id
+    rejected --> [*]: DELETE /concepts/id
+```
+
+**Honestidad sobre esta máquina de estados: hoy no está forzada en código.** Los cuatro
+valores de `curation_status` se validan contra el `Literal` de Pydantic, pero cualquier
+transición entre ellos se acepta. Las flechas de arriba son la política editorial
+prevista, no una invariante del sistema. Forzarla es trabajo pendiente y está en el
+[backlog](engineering-backlog.md).
+
+`active` es un eje distinto de `curation_status`: un concepto aprobado puede quedar
+inactivo cuando se retira de uso. En SNOMED CT nada se borra, se inactiva. Este modelo
+conserva esa idea aunque permita `DELETE` para la limpieza del laboratorio.
+
+---
+
+## 10. Modelo de datos
+
+El DER, el esquema físico y el documento de Elasticsearch viven en
+[data-model.md](data-model.md), con la correspondencia campo a campo entre las dos
+representaciones.
+
+---
+
+## 11. Límites conocidos de esta arquitectura
+
+- **La indexación es sincrónica.** El paso a Elasticsearch ocurre dentro del request. Un
+  sistema en producción lo movería a un worker que consume una tabla de outbox: la
+  historia de recuperación es la misma, cambia quién ejecuta el paso.
+- **SQLite tiene un solo escritor a la vez.** Alcanza para un curador. Con escrituras
+  concurrentes aparece `database is locked`; ese es el momento de PostgreSQL.
+- **Sin autenticación en la API.** Cualquiera que llegue a la página puede cambiar
+  estados. Es local; poner auth antes de exponerlo a otra máquina.
+- **Un solo nodo, cero réplicas.** No se puede demostrar tolerancia a fallos distribuida
+  con esta topología, y un experimento multinodo en la misma máquina sigue compartiendo
+  el dominio de falla del host.
+- **Sin migraciones.** `create_all()` alcanza para arrancar. Alembic va antes del primer
+  cambio de esquema sobre datos que importen.
+
+El listado completo con prioridades está en el
+[backlog de ingeniería](engineering-backlog.md).

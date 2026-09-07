@@ -1,73 +1,45 @@
-# Laboratorio de Elasticsearch
+# Curaduría de terminología clínica sobre Elasticsearch
 
-Proyecto personal de aprendizaje sobre Elasticsearch: ingesta, indexación, búsqueda,
-agregación y almacenamiento. No hay trabajo académico de por medio.
+Proyecto personal de aprendizaje sobre Elasticsearch como **motor de búsqueda**:
+analyzers, relevancia, facetas, autocompletado y el problema real de mantener un almacén
+transaccional sincronizado con un índice derivado.
 
-El repo contiene **dos entregables** sobre la misma infraestructura Docker:
+Un servicio FastAPI sobre dos almacenes — **SQLite** guarda la decisión editorial,
+**Elasticsearch** guarda una proyección buscable de esa decisión — con una interfaz de
+curaduría en React + TypeScript. El modelo de dominio es de conceptos clínicos tipo
+SNOMED CT.
 
-| Entregable | Estado | Qué ejercita |
-|---|---|---|
-| [**Curaduría de terminología clínica**](#1-curaduría-de-terminología-clínica) | Funcionando | Elasticsearch como **motor de búsqueda**: analyzers, relevancia, autocompletado. Más FastAPI, SQLite y React |
-| [**Laboratorio de eventos sintéticos**](#2-laboratorio-de-eventos-sintéticos) | Documentado, sin implementar | Elasticsearch como **motor analítico**: agregaciones, histogramas, benchmarks |
+**Estado:** funcionando y verificado. 33 tests de integración en verde contra
+Elasticsearch 9.5.3 real.
 
-Son las dos mitades del mismo motor. La primera está construida y verificada; la
-segunda tiene diseño y criterios de aceptación, pero su generador de Python nunca se
-escribió.
-
-## Infraestructura común
-
-Elasticsearch y Kibana corren en Docker, fijados en 9.5.3. Iniciá Docker Desktop y
-después:
-
-```powershell
-cd D:\Repositorio\bigdata-elasticsearch
-docker compose up -d --pull never
-docker compose ps -a
-```
-
-`--pull never` usa las imágenes ya descargadas. En una máquina nueva, traelas primero
-con `docker compose pull`.
-
-- Kibana: <http://localhost:5601>, usuario `elastic`.
-- API de Elasticsearch: <http://localhost:9200>, mismas credenciales.
-- Contraseña: el valor de `ELASTIC_PASSWORD` en tu `.env` local. **No** uses
-  `KIBANA_PASSWORD`: esa es de la cuenta de servicio interna de Kibana.
-- Una petición sin autenticar debe devolver HTTP 401.
-
-Ambos puertos se publican solo en `127.0.0.1`. Es un laboratorio local que usa
-únicamente HTTP; no lo expongas sin revisar antes el diseño del despliegue.
-
-Detener conservando los datos:
-
-```powershell
-docker compose down
-```
-
-Evitá `down -v`: borra los volúmenes. Cambiar solo `ELASTIC_PASSWORD` en `.env` no
-cambia la contraseña ya almacenada en un clúster existente.
-
-Detalles de configuración, límites de recursos y recuperación en
-[local-stack.md](docs/local-stack.md). Evidencia de autenticación en
-[access-and-verification.md](docs/access-and-verification.md).
+![UI de curaduría](docs/img/curation-ui-desktop.png)
 
 ---
 
-## 1. Curaduría de terminología clínica
+## El problema que resuelve
 
-Servicio FastAPI sobre dos almacenes: **SQLite** para la decisión editorial,
-**Elasticsearch** para la búsqueda. Modelo de conceptos clínicos tipo SNOMED CT, con
-una UI de curaduría en React + TypeScript.
+Un curador busca `hipertension`, sin tilde, porque así es como se escribe rápido. Si el
+sistema no encuentra "Hipertensión arterial", el problema no es del curador.
 
-Es el camino que ejercita el stack completo de una posición backend: API REST, Docker,
-Linux, Elasticsearch, y el problema real de mantener dos almacenes sincronizados.
+Escribe `diabetis` con un error de tipeo: encuentra las tres diabetes. Escribe `EPOC`:
+aparece el concepto correcto, aunque esa sigla no esté en el nombre completamente
+especificado — está entre sus sinónimos.
 
-### Levantar
+Y cuando algo **no** aparece, hay un desplegable que muestra en qué tokens se partió la
+consulta. Ahí está la explicación de todo lo anterior, y es la diferencia entre una
+búsqueda que es una caja negra y una que se puede diagnosticar.
+
+## Cómo levantarlo
+
+Requisitos: Docker Desktop, Python 3.14 con el entorno `.vennv`, Node 22.
 
 ```powershell
+cd D:\Repositorio\bigdata-elasticsearch
+
 # 1. Infraestructura
 docker compose up -d --pull never
 
-# 2. Cargar datos de ejemplo (una vez)
+# 2. Cargar el fixture (una sola vez)
 .\.vennv\Scripts\python.exe -m scripts.seed --reset
 
 # 3. API
@@ -79,130 +51,128 @@ npm install
 npm run dev
 ```
 
-- API y documentación interactiva: <http://127.0.0.1:8000/docs>
-- UI de curaduría: <http://localhost:5173>
+| Superficie | URL |
+|---|---|
+| UI de curaduría | <http://localhost:5173> |
+| API y documentación interactiva | <http://127.0.0.1:8000/docs> |
+| Estado del servicio | <http://127.0.0.1:8000/health> |
+| Kibana | <http://localhost:5601>, usuario `elastic` |
+| Elasticsearch | <http://localhost:9200>, mismas credenciales |
 
-Vite escucha en `localhost`, que en Windows resuelve a IPv6. `127.0.0.1:5173` puede no
-responder aunque el servidor esté arriba.
+`--pull never` usa las imágenes ya descargadas. En una máquina nueva, traelas primero con
+`docker compose pull`.
 
-### Probalo
+La contraseña sale de `ELASTIC_PASSWORD` en tu `.env` local. **No** uses `KIBANA_PASSWORD`:
+esa es de la cuenta de servicio interna de Kibana. Una petición sin autenticar a
+Elasticsearch debe devolver HTTP 401.
 
-Buscá `hipertension` sin tilde. Encuentra "Hipertensión arterial". Escribí `diabetis`
-con error de tipeo: encuentra las tres diabetes. Buscá `EPOC`: aparece por sinónimo,
-aunque esa sigla no está en el nombre completamente especificado.
+Vite escucha en `localhost`, que en Windows resuelve a IPv6. `http://127.0.0.1:5173` puede
+no responder aunque el servidor esté arriba.
 
-Después abrí el desplegable "¿Cómo se analiza esta consulta?" y mirá en qué tokens se
-parte lo que escribiste. Ahí está la explicación de todo lo anterior.
+Para detener conservando los datos: `docker compose down`. **Evitá `down -v`**: borra los
+volúmenes.
 
-### Verificación
+## Verificación
 
 ```console
-$ .\.vennv\Scripts\python.exe -m pytest tests/test_curation_api.py tests/test_stack.py -q
-33 passed in 48.09s
+$ .\.vennv\Scripts\python.exe -m pytest tests/ -q
+33 passed, 2 warnings in 47.81s
 ```
 
-Al 2026-09-06: 33 tests en verde, 20 conceptos cargados y conciliados contra
-Elasticsearch 9.5.3, y la UI probada en navegador real a 1440px y 390px.
+Suite completa, sin exclusiones, contra el stack real. Son tests de **integración**:
+necesitan Docker arriba. Usan su propio índice (`clinical-concepts-test`) y su propio
+archivo SQLite en un directorio temporal, así que nunca tocan los datos de desarrollo.
 
-### Documentación
+Al 2026-09-06: 20 conceptos cargados y conciliados contra Elasticsearch 9.5.3, y la UI
+verificada en navegador real a 1440px y 390px.
 
-- [curation-api.md](docs/curation-api.md): diseño del índice, analyzers, endpoints,
-  ejemplos, los dos bugs que encontraron los tests, y límites conocidos.
-- [curation-ui.md](docs/curation-ui.md): componentes, decisiones de diseño y evidencia
-  de verificación en navegador.
-- [architecture.md](docs/architecture.md): diagramas de despliegue, flujo de datos y
-  modelo conceptual.
+## Cómo está hecho
 
----
+```mermaid
+flowchart LR
+    Curator["Curador"] --> UI["UI React :5173"]
+    UI -->|"proxy /api"| API["FastAPI :8000"]
+    API -->|"decisión editorial"| DB[("SQLite")]
+    API -->|"proyección buscable"| ES[("Elasticsearch :9200")]
+    Kibana["Kibana :5601"] --> ES
+```
 
-## 2. Laboratorio de eventos sintéticos
+SQLite es la fuente de verdad. Elasticsearch es un índice **derivado**: si se borra
+entero, se reconstruye. Los dos pueden divergir, y el sistema no promete que no lo hagan
+— promete que la divergencia es **visible y reparable**. La franja superior de la UI
+muestra ambos conteos permanentemente.
 
-Diseño de un flujo que va de eventos sintéticos de tienda online a documentos
-validados, métricas conciliadas y un dashboard. **Está documentado, no implementado.**
+Tres decisiones que explican el resto del diseño:
 
-- [Requisitos de producto (PRD)](docs/prd.md): objetivos, alcance y criterios de aceptación.
-- [Diagramas de arquitectura](docs/architecture.md): flujo de datos, secuencia de reintentos y modelo de eventos.
-- [Dashboard de demostración](dashboard/index.html): ejemplos sintéticos interactivos; funciona sin Docker.
-- [Guía de presentación](docs/dashboard.md): filtros, definiciones de métricas y seguimiento en Kibana.
+1. **La fila se marca sucia antes de indexar.** Si el proceso muere entre los dos pasos,
+   queda evidencia recuperable en lugar de deriva silenciosa.
+2. **Un fallo de indexación no rechaza la edición.** El curador ya decidió; perder eso por
+   una caída de Elasticsearch es peor que servir un índice atrasado un rato.
+3. **Los filtros van en contexto `filter`, no en `must`.** Un filtro responde sí o no y no
+   debe tocar el puntaje de relevancia. Hay un test que lo fija.
 
-El dashboard es un demostrador offline, no una conexión a Elasticsearch.
-`tests/test_events.py` importa un `events.py` que no existe: esos tests fallan si
-corrés la suite completa. Es el contrato del generador que quedó sin escribir.
+## Documentación
 
-Para correr solo lo que pasa:
+| Documento | Qué contiene |
+|---|---|
+| [architecture.md](docs/architecture.md) | Contexto, componentes, despliegue, secuencias, pipelines, flujo de curaduría y estados |
+| [data-model.md](docs/data-model.md) | DER, esquema físico, el documento de Elasticsearch y su correspondencia |
+| [prd.md](docs/prd.md) | Problema, requisitos con evidencia, criterios de aceptación, alcance y riesgos |
+| [curation-api.md](docs/curation-api.md) | Endpoints, diseño del índice, analyzers y ejemplos con `curl` |
+| [curation-ui.md](docs/curation-ui.md) | Componentes, decisiones de frontend y evidencia en navegador |
+| [engineering-backlog.md](docs/engineering-backlog.md) | Qué falta para que esto sea software profesional, priorizado |
+| [local-stack.md](docs/local-stack.md) | Configuración de Docker, límites de recursos y recuperación |
+| [access-and-verification.md](docs/access-and-verification.md) | Evidencia de autenticación del stack |
+| [presentation-verification.md](docs/presentation-verification.md) | Registro de verificación ejecutada |
 
-```powershell
-.\.vennv\Scripts\python.exe -m pytest tests/test_curation_api.py tests/test_stack.py -q
+## Estructura
+
+```
+app/          servicio FastAPI: modelos, índice, proyección, búsqueda, routers
+ui/           interfaz React + TypeScript con Vite
+scripts/      carga del fixture
+seed/         20 conceptos clínicos de ejemplo
+tests/        tests de integración contra el stack real
+docs/         documentación y diagramas
+compose.yaml  Elasticsearch + Kibana
 ```
 
 ## Entorno
 
-- Directorio del proyecto: `D:\Repositorio\bigdata-elasticsearch`.
-- Entorno virtual: `.vennv` (el nombre pedido por el usuario).
-- Python 3.14.6; pip 26.1.2; entorno aislado confirmado.
-- Node 22.23.2; npm 10.9.8 (solo para la UI).
-- Windows 11 Pro, Ryzen 7 5700G, 16 procesadores lógicos, 31.3 GB de RAM.
-- Docker CLI 29.7.2, Compose 5.3.1. WSL versión 2 por defecto.
+- Python 3.14.6, entorno virtual en `.vennv`. Dependencias fijadas en `requirements.txt`
+  (FastAPI, SQLAlchemy 2.0, cliente `elasticsearch` 9.5.0, pytest).
+- Node 22.23.2 y npm 10.9.8, solo para la UI. React 18, TypeScript 5.7, Vite 6.
+- Docker CLI 29.7.2, Compose 5.3.1, WSL 2.
+- Windows 11 Pro, Ryzen 7 5700G, 31.3 GB de RAM.
 
-Activar el entorno virtual en PowerShell:
-
-```powershell
-.\.vennv\Scripts\Activate.ps1
-```
-
-La ejecución directa funciona sin activarlo:
-
-```powershell
-.\.vennv\Scripts\python.exe --version
-```
-
-Dependencias de Python fijadas en `requirements.txt` (FastAPI, SQLAlchemy, cliente
-`elasticsearch` 9.5.0, pytest). Para reconstruir el entorno:
+Reconstruir el entorno de Python:
 
 ```powershell
 .\.vennv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### Estructura
+## Alcance y límites
 
-```
-app/          servicio FastAPI (modelos, índice, búsqueda, routers)
-ui/           interfaz React + TypeScript
-scripts/      carga del fixture
-seed/         20 conceptos clínicos de ejemplo
-tests/        tests de integración
-dashboard/    demostrador offline del laboratorio de eventos
-docs/         documentación
-compose.yaml  Elasticsearch + Kibana
-```
+Es un laboratorio local. **Sin autenticación en la API**, un solo nodo de Elasticsearch,
+solo HTTP y todo publicado en `127.0.0.1`. No lo expongas sin revisar antes el diseño de
+despliegue.
 
-## Evaluación de NotebookLM
+El fixture de `seed/concepts.json` es un subconjunto ilustrativo en castellano. **No es
+una distribución de SNOMED CT**, que requiere licencia de SNOMED International para
+redistribuirse.
 
-Notebook: [BIG DATA](https://notebooklm.google.com/notebook/f73407c1-9c7f-4146-b94d-80ab5bbfd62e),
-32 fuentes indexadas. Se inspeccionó el inventario y se leyeron directamente las
-fuentes relevantes; esto no implica que se haya auditado cada una.
+El repositorio arrancó con otro alcance — un laboratorio de eventos sintéticos de
+e-commerce orientado a agregaciones y dashboards. Se descartó sin implementar; queda en
+el commit `ddccbd0`.
 
-- La transcripción sobre mappings cubre mappings explícitos y dinámicos, text versus
-  keyword, analizadores, objetos anidados y reindexación. Es el material que más se
-  aplica al índice de conceptos clínicos.
-- La transcripción sobre agregaciones cubre métricas, buckets, subagregaciones y
-  pipeline aggregations.
-- La guía de instalación de ELK apunta a Fedora 23 y hace referencia a Kibana 4. Sus
-  instrucciones no sirven como guía de configuración actual.
-- La fuente "Introduccion a Elasticsearch 2026 - Aprender BIG DATA desde cero" devuelve
-  solo su título (64 caracteres), no contenido didáctico.
-- "Tecnologias y Arquitecturas de Big Data" contiene una conversación previa con IA
-  sobre un portfolio personal. Es contexto, no autoridad técnica.
-- La transcripción sobre mappings omite una salvedad importante: la detección numérica
-  para cadenas numéricas está deshabilitada por defecto. Verificá contra la
-  documentación oficial en vez de copiar la transcripción.
+Lo que falta para que esto sea software profesional está priorizado en el
+[backlog de ingeniería](docs/engineering-backlog.md).
 
 ## Referencias oficiales
 
-- [Dynamic field mapping](https://www.elastic.co/docs/manage-data/data-store/mapping/dynamic-field-mapping)
 - [Text analysis](https://www.elastic.co/docs/manage-data/data-store/text-analysis)
+- [Dynamic field mapping](https://www.elastic.co/docs/manage-data/data-store/mapping/dynamic-field-mapping)
+- [Near-real-time search](https://www.elastic.co/docs/manage-data/data-store/near-real-time-search)
 - [Docker installation](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-docker-basic)
 - [Kibana version compatibility](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-kibana-with-docker)
 - [Clusters, nodes, and shards](https://www.elastic.co/docs/deploy-manage/distributed-architecture/clusters-nodes-shards)
-- [Near-real-time search](https://www.elastic.co/docs/manage-data/data-store/near-real-time-search)
-- [Small-cluster resilience](https://www.elastic.co/docs/deploy-manage/production-guidance/availability-and-resilience/resilience-in-small-clusters)

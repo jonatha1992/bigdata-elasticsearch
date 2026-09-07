@@ -2,11 +2,16 @@
 
 Última actualización: 2026-09-06.
 
-Dos entregas registradas acá, en orden cronológico inverso.
+Registro de la entrega del sistema de curaduría clínica y de la evidencia ejecutada
+para verificarla.
+
+> **Nota de alcance.** Una entrega anterior — el demostrador offline del laboratorio de
+> eventos sintéticos — se retiró del repositorio junto con el resto de ese alcance. Su
+> registro de verificación se eliminó con ella; queda en el commit `ddccbd0`.
 
 ---
 
-# Entrega 2 — Curaduría de terminología clínica (2026-09-06)
+# Curaduría de terminología clínica (2026-09-06)
 
 API FastAPI sobre SQLite y Elasticsearch, con UI React + TypeScript. Se instalaron
 dependencias de aplicación por primera vez en el proyecto. No se modificó la
@@ -27,11 +32,12 @@ configuración de Docker, las credenciales ni los volúmenes.
 ### Suite de tests
 
 ```console
-$ .\.vennv\Scripts\python.exe -m pytest tests/test_curation_api.py tests/test_stack.py -q
-33 passed in 48.09s
+$ .\.vennv\Scripts\python.exe -m pytest tests/ -q
+33 passed, 2 warnings in 47.81s
 ```
 
-29 tests nuevos más los 4 preexistentes de infraestructura. Son tests de **integración**:
+Suite completa del repositorio, sin exclusiones: 29 tests de la API de curaduría más
+los 4 de infraestructura. Son tests de **integración**:
 necesitan el stack Docker arriba. Usan su propio índice (`clinical-concepts-test`) y su
 propio archivo SQLite en un directorio temporal, así que no tocan los datos de
 desarrollo. Si Elasticsearch no responde, la suite se saltea con un mensaje explícito en
@@ -163,45 +169,3 @@ Eliminar `app/`, `ui/`, `scripts/`, `seed/`, `curation.db` y los dos documentos 
 Borrar el índice con `DELETE /clinical-concepts`. Conservar `.env`, la configuración de
 Docker y los volúmenes nombrados. No hubo despliegue a producción.
 
----
-
-# Entrega 1 — Dashboard de presentación offline (2026-09-06)
-
-Clasificación M: demostrador interactivo local y documentación de producto enlazada.
-No cambió infraestructura, credenciales ni datos persistentes.
-
-## Entregado
-
-- [PRD](prd.md): intención del producto, requisitos medibles y hitos propuestos.
-- [Arquitectura](architecture.md): diagramas Mermaid con los límites entre lo existente y lo propuesto.
-- [Dashboard](../dashboard/index.html): métricas sintéticas offline, filtros compartidos
-  de fecha y categoría, gráficos, ranking de productos y flujo del sistema visible.
-- [Guía de presentación](dashboard.md): cómo mostrar la demo y qué queda para Kibana.
-
-## Chequeos ejecutados
-
-| Comportamiento | RED | GREEN | Refactor | Verificación final |
-|---|---|---|---|---|
-| Métricas, filtros combinados, resultados vacíos, fechas inválidas, fixture determinista | `node --test dashboard/model.test.js` falló porque no se pudo importar la API de `model.js`, ausente a propósito | Mismo comando: 5 pasaron, 0 fallaron | No hizo falta refactor aparte; funciones puras pequeñas con aserciones independientes | Un revisor independiente reejecutó la suite: 5 pasaron |
-| Renderizado en navegador | La aserción falló mientras `app.js` estaba ausente a propósito | Las aserciones pasaron tras la implementación | Un helper compartido del DOM mantiene consistente la inserción de texto | Métricas por defecto, filtrado, estado vacío, fechas invertidas y reset: todos pasaron |
-
-Chequeos adicionales:
-
-- `node --check dashboard/app.js` pasó.
-- La revisión independiente no encontró contradicciones de métricas ni de estado.
-- Línea base en navegador: 940 eventos, 140 eventos de compra, USD 22.430,00 de valor de
-  compras, 47 eventos de error y 5,0% de proporción de errores.
-- Responsive a 390px y 1440px: sin desborde horizontal.
-- Los diagramas Mermaid recibieron revisión de fuente y lectura, no renderizado
-  automatizado. El diagrama de sistema del dashboard se renderiza en HTML/CSS.
-
-## Límites de esta entrega
-
-La demo no tiene backend ni métricas en vivo. Usa un fixture de JavaScript aparte y no
-implementa el módulo `events.py` que esperan los tests del generador. Esos tests
-preexistentes no se modificaron y **siguen fallando**: `tests/test_events.py` importa un
-módulo que no existe.
-
-La recuperación y el almacenamiento de Memorix no pudieron enlazarse a este workspace
-sin Git. La CLI tampoco estaba disponible. No se afirma que haya habido sincronización
-de memoria.

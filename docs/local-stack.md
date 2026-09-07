@@ -3,9 +3,10 @@
 ## Alcance del producto
 
 El usuario quiere un proyecto personal de aprendizaje de Big Data y autorizó iniciar
-Docker y preparar Elasticsearch y Kibana. Esta entrega provee una base local funcional.
-La generación de eventos sintéticos, los dashboards, los benchmarks y un clúster
-multinodo quedan para entregas posteriores.
+Docker y preparar Elasticsearch y Kibana. Esta entrega provee la base local sobre la
+que corre el [sistema de curaduría clínica](architecture.md). Los benchmarks y un
+clúster multinodo quedan fuera; están en el
+[backlog de ingeniería](engineering-backlog.md).
 
 Gobernanza: reclasificado de M a L antes de arrancar los servicios, porque el contrato
 global incluye explícitamente autenticación, secretos y topología de despliegue. La
