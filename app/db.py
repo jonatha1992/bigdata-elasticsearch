@@ -7,7 +7,7 @@ driver install, not a rewrite.
 
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -28,6 +28,28 @@ def _engine_kwargs(url: str) -> dict:
 settings = get_settings()
 engine = create_engine(settings.database_url, **_engine_kwargs(settings.database_url))
 SessionFactory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+if settings.database_url.startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, connection_record) -> None:
+        """Turn on foreign key enforcement for every new SQLite connection.
+
+        SQLite ships with ``PRAGMA foreign_keys = 0``, so the ``ON DELETE
+        CASCADE`` declared in models.py is parsed and then ignored. Without this
+        the referential integrity of the schema depends on every write going
+        through SQLAlchemy, because the ORM-level ``cascade`` is what actually
+        deletes the child rows. A raw SQL DELETE would leave orphans.
+
+        The pragma is per-connection, not per-database, which is why it has to
+        be re-applied on connect rather than set once at creation time. The
+        listener is registered only for SQLite: other engines enforce foreign
+        keys natively and would reject the statement.
+        """
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def get_session() -> Iterator[Session]:

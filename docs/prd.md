@@ -135,9 +135,11 @@ redistribuirse.
 
 - **El mapping es inmutable.** Cambiar un analyzer exige recrear el índice y reindexar.
   Con datos reales eso es una migración planificada, no un `--reset`.
-- **La integridad depende del ORM.** SQLite no aplica claves foráneas por defecto
-  (`PRAGMA foreign_keys = 0`), así que el `ON DELETE CASCADE` declarado no actúa. Hoy lo
-  cubre el `cascade` de SQLAlchemy. Un `DELETE` en SQL crudo dejaría huérfanos.
+- **~~La integridad depende del ORM.~~ Resuelto el 2026-09-06.** SQLite no aplica claves
+  foráneas por defecto (`PRAGMA foreign_keys = 0`), así que el `ON DELETE CASCADE`
+  declarado no actuaba y un `DELETE` en SQL crudo dejaba huérfanos. `app/db.py` ahora
+  enciende el pragma en cada conexión nueva, solo para SQLite. Evidencia:
+  `tests/test_database_integrity.py`.
 - **La máquina de estados de curaduría no está forzada.** Los valores se validan; las
   transiciones no. Cualquier estado puede saltar a cualquier otro.
 - **`fuzziness: AUTO` es un compromiso.** Tolera los errores de tipeo reales, pero con un

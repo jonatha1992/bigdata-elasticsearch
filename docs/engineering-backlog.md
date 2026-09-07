@@ -48,25 +48,6 @@ Arreglo: un rol de Elasticsearch limitado a `clinical-concepts*` con los privile
 
 **Señal de urgencia:** ya. Es media hora de trabajo y elimina toda una clase de accidente.
 
-### Encender las claves foráneas de SQLite
-
-Verificado: `PRAGMA foreign_keys = 0`. El `ON DELETE CASCADE` del esquema está declarado
-pero **no se aplica**. Hoy lo salva el `cascade="all, delete-orphan"` del ORM, lo que
-significa que la integridad referencial depende de que absolutamente todo pase por
-SQLAlchemy.
-
-```python
-from sqlalchemy import event
-
-@event.listens_for(engine, "connect")
-def _enable_foreign_keys(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-```
-
-**Señal de urgencia:** el primer script que toque la base sin pasar por el ORM.
-
 ---
 
 ## P1 — Lo próximo a construir
@@ -283,6 +264,10 @@ Marcado correcto **no es lo mismo** que auditoría. Nadie lo probó con NVDA ni 
 
 Vale registrarlo, porque en un backlog todo parece deuda:
 
+- **Las claves foráneas se aplican en la base, no solo en el ORM.** `app/db.py` enciende
+  `PRAGMA foreign_keys=ON` en cada conexión de SQLite, y hay un test que borra por SQL
+  crudo para probarlo. Sin el pragma ese mismo `DELETE` dejaba dos descripciones
+  huérfanas.
 - **Los tests encontraron bugs reales**, no cobertura decorativa. Dos, documentados con su
   causa raíz.
 - **Los fallos se hacen visibles en vez de esconderse.** `pending_index`, `/admin/reconcile`
