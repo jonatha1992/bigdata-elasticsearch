@@ -100,6 +100,11 @@ def update_concept(
     changes = payload.model_dump(exclude_unset=True, exclude={"descriptions"})
 
     for field, value in changes.items():
+        if value is None and field in ("fsn", "semantic_tag", "module", "active", "curation_status"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"El campo '{field}' no puede ser nulo",
+            )
         setattr(concept, field, value)
     if payload.descriptions is not None:
         _apply_descriptions(concept, payload.descriptions)
@@ -118,7 +123,12 @@ def delete_concept(
     concept_id: str, session: SessionDep, client: ClientDep
 ) -> Response:
     concept = _get_or_404(session, concept_id)
+    ok = delete_from_index(concept_id, client)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo eliminar el concepto del índice de búsqueda; operación abortada para mantener consistencia.",
+        )
     session.delete(concept)
     session.commit()
-    delete_from_index(concept_id, client)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
